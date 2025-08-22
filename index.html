@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dodge — Tiny HTML5 Game</title>
+  <style>
+    :root {
+      --bg1: #0f1226; /* deep indigo */
+      --bg2: #1a2b4a; /* blue slate */
+      --accent: #78ffd6; /* mint */
+      --accent2: #a8ff78; /* lime mint */
+      --text: #eaf2ff;
+      --muted: #93a4c0;
+      --danger: #ff7a7a;
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: radial-gradient(1200px 800px at 70% 10%, #1e2d50, var(--bg1)) fixed;
+      background-color: var(--bg1);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      color: var(--text);
+      overflow: hidden; /* keep it gamey on mobile */
+      -webkit-user-select: none; user-select: none;
+    }
+
+    /* Simple starfield vibes */
+    body::before {
+      content: "";
+      position: fixed; inset: 0;
+      background-image:
+        radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,0.14) 50%, transparent 52%),
+        radial-gradient(2px 2px at 80% 60%, rgba(255,255,255,0.12) 50%, transparent 52%),
+        radial-gradient(1.6px 1.6px at 50% 80%, rgba(255,255,255,0.10) 50%, transparent 52%),
+        radial-gradient(1.2px 1.2px at 65% 45%, rgba(255,255,255,0.10) 50%, transparent 52%);
+      pointer-events: none;
+      opacity: 0.9;
+    }
+
+    .wrap {
+      position: fixed; inset: 0; display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px; gap: 10px;
+      backdrop-filter: blur(6px);
+      background: linear-gradient(90deg, rgba(120,255,214,0.12), rgba(168,255,120,0.08));
+      border-bottom: 1px solid rgba(168,255,120,0.18);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.24);
+    }
+
+    header .brand {
+      display: inline-flex; gap: 10px; align-items: center; font-weight: 700; letter-spacing: .4px;
+    }
+
+    header .brand .dot {
+      width: 10px; height: 10px; border-radius: 999px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      box-shadow: 0 0 12px rgba(168,255,120,0.7);
+    }
+
+    #hud {
+      font-variant-numeric: tabular-nums;
+      display: flex; gap: 18px; align-items: center; color: var(--text);
+    }
+
+    #hud .pill { 
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+      padding: 6px 10px; border-radius: 999px; box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    }
+
+    #hud button {
+      appearance: none; border: 0; border-radius: 999px; padding: 8px 12px; font-weight: 600;
+      background: linear-gradient(135deg, rgba(120,255,214,0.18), rgba(168,255,120,0.14));
+      color: var(--text);
+      cursor: pointer;
+      transition: transform .08s ease, filter .2s ease;
+    }
+    #hud button:active { transform: translateY(1px) scale(0.98); }
+
+    main { position: relative; }
+
+    canvas {
+      display: block; width: 100vw; height: calc(100vh - 70px - 64px);
+      /* crisp pixels on HiDPI */
+      image-rendering: optimizeSpeed; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; image-rendering: pixelated;
+      background: linear-gradient(180deg, rgba(20,28,56,0.6), rgba(12,16,34,0.8));
+    }
+
+    /* Overlays */
+    .overlay {
+      position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px;
+    }
+    .card {
+      max-width: 680px; width: min(90vw, 680px);
+      background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.04));
+      border: 1px solid rgba(255,255,255,0.14); border-radius: 18px;
+      padding: 20px 22px; box-shadow: 0 30px 80px rgba(0,0,0,0.35);
+    }
+    .card h1 { margin: 6px 0 8px; font-size: clamp(20px, 4.5vw, 36px); }
+    .card p { margin: 8px 0; color: var(--muted); }
+
+    .btn-row { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 12px; }
+    .btn {
+      appearance: none; border: 0; border-radius: 12px; padding: 10px 14px; font-weight: 700; letter-spacing: .3px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0b0f1e; cursor: pointer;
+      box-shadow: 0 12px 28px rgba(120,255,214,0.25);
+    }
+
+    footer {
+      display: flex; align-items: center; justify-content: center;
+      gap: 10px; padding: 8px 10px; color: var(--muted);
+      background: linear-gradient(90deg, rgba(120,255,214,0.06), rgba(168,255,120,0.04));
+      border-top: 1px solid rgba(168,255,120,0.12);
+      flex-wrap: wrap;
+    }
+    footer .sep { opacity: .4; }
+    footer #testStatus { font-variant-numeric: tabular-nums; }
+
+    /* Mobile touch zone hints */
+    #touchZones { position: absolute; inset: 0; display: none; }
+    @media (hover: none) and (pointer: coarse) {
+      #touchZones { display: grid; grid-template-columns: 1fr 1fr; }
+      #touchZones div { outline: 2px dashed transparent; }
+      #touchZones .hint {
+        position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+        background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.14);
+        padding: 6px 12px; border-radius: 999px; font-size: 13px; color: var(--text);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand"><span class="dot"></span> <span>Dodge</span></div>
+      <div id="hud">
+        <div class="pill">Score: <span id="score">0.0</span>s</div>
+        <div class="pill">Best: <span id="best">0.0</span>s</div>
+        <button id="pauseBtn" aria-label="Pause">Pause</button>
+      </div>
+    </header>
+
+    <main>
+      <canvas id="game" aria-label="Game canvas"></canvas>
+
+      <div id="overlay" class="overlay" hidden>
+        <div class="card">
+          <h1 id="ovTitle">Dodge the Blocks</h1>
+          <p id="ovDesc">Avoid the falling blocks. Last as long as you can.</p>
+          <p><b>Controls:</b> ← → or A/D to move • <kbd>P</kbd> to pause • <kbd>Enter</kbd> to start/restart</p>
+          <div class="btn-row">
+            <button class="btn" id="startBtn">Play</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="touchZones">
+        <div id="zoneLeft" aria-label="Left move zone"></div>
+        <div id="zoneRight" aria-label="Right move zone"></div>
+        <div class="hint">Tap left/right side to move</div>
+      </div>
+    </main>
+
+    <footer>
+      <span>Made with pure HTML5 Canvas + JS. No libs.</span>
+      <span class="sep">•</span>
+      <span id="testStatus">Tests: running…</span>
+    </footer>
+  </div>
+
+  <script>
+  // Robust boot: wait for full window load (covers sandboxed/slow layouts)
+  window.addEventListener('load', () => {
+    try {
+      // Safe storage wrapper (handles sandbox that blocks localStorage)
+      const storage = (() => {
+        try {
+          const t = '__dodge_test__';
+          window.localStorage.setItem(t, '1');
+          window.localStorage.removeItem(t);
+          return window.localStorage;
+        } catch (e) {
+          const mem = {};
+          return {
+            getItem: (k) => (k in mem ? mem[k] : null),
+            setItem: (k, v) => { mem[k] = String(v); },
+            removeItem: (k) => { delete mem[k]; },
+          };
+        }
+      })();
+
+      const canvas = document.getElementById('game');
+      const scoreEl = document.getElementById('score');
+      const bestEl = document.getElementById('best');
+      const pauseBtn = document.getElementById('pauseBtn');
+
+      const overlay = document.getElementById('overlay');
+      const ovTitle = document.getElementById('ovTitle');
+      const ovDesc = document.getElementById('ovDesc');
+      const startBtn = document.getElementById('startBtn');
+
+      const zoneLeft = document.getElementById('zoneLeft');
+      const zoneRight = document.getElementById('zoneRight');
+
+      // Context guard (some sandboxes block 2D contexts)
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        overlay.hidden = false;
+        ovTitle.textContent = 'Canvas not supported here';
+        ovDesc.textContent = 'Your browser/sandbox blocked the 2D context. Try another browser or disable strict sandboxing.';
+        startBtn.textContent = 'Retry';
+        startBtn.onclick = () => location.reload();
+        return;
+      }
+
+      const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+
+      const state = {
+        mode: 'ready', // 'ready' | 'playing' | 'paused' | 'gameover'
+        time: 0, // seconds survived in this run
+        lastTs: 0,
+        player: null,
+        obstacles: [],
+        spawnTimer: 0,
+        spawnInterval: 0.9, // seconds between spawns (will get smaller)
+        baseFall: 160, // px/s, increases with time
+        keys: { left: false, right: false },
+        best: (() => { const v = parseFloat(storage.getItem('dodge-best') || '0'); return isNaN(v) ? 0 : v; })(),
+      };
+
+      const rand = (a, b) => a + Math.random() * (b - a);
+      const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+      const aabb = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+      function resize() {
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = Math.max(1, Math.floor(rect.width * DPR));
+        canvas.height = Math.max(1, Math.floor(rect.height * DPR));
+        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      }
+
+      window.addEventListener('resize', resize);
+      resize();
+
+      function resetPlayer() {
+        const cw = canvas.width / DPR, ch = canvas.height / DPR;
+        state.player = { w: 36, h: 36, x: cw * 0.5 - 18, y: ch - 60, speed: 380 };
+      }
+
+      function startGame() {
+        state.mode = 'playing';
+        state.time = 0;
+        state.obstacles = [];
+        state.spawnTimer = 0;
+        state.spawnInterval = 0.9;
+        state.baseFall = 160;
+        state.lastTs = performance.now();
+        resetPlayer();
+        overlay.hidden = true;
+      }
+
+      function gameOver() {
+        state.mode = 'gameover';
+        if (state.time > state.best) {
+          state.best = state.time;
+          try { storage.setItem('dodge-best', String(state.best)); } catch {}
+        }
+        ovTitle.textContent = 'Game Over';
+        ovDesc.textContent = `You survived ${state.time.toFixed(1)}s. Press Enter or click Play to try again.`;
+        overlay.hidden = false;
+      }
+
+      function togglePause() {
+        if (state.mode === 'playing') {
+          state.mode = 'paused';
+          ovTitle.textContent = 'Paused';
+          ovDesc.textContent = 'Press P or click Resume to continue.';
+          startBtn.textContent = 'Resume';
+          overlay.hidden = false;
+        } else if (state.mode === 'paused') {
+          state.mode = 'playing';
+          state.lastTs = performance.now();
+          overlay.hidden = true;
+          startBtn.textContent = 'Play';
+        }
+      }
+
+      function spawnObstacle() {
+        const cw = canvas.width / DPR;
+        const w = rand(40, 120);
+        const x = rand(6, Math.max(6, cw - w - 6));
+        const h = rand(14, 20);
+        const speed = state.baseFall + state.time * 10 + rand(-10, 40);
+        state.obstacles.push({ x, y: -h, w, h, speed });
+      }
+
+      function drawRoundedRect(x, y, w, h, r = 8) {
+        const rr = Math.min(r, w * 0.5, h * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(x + rr, y);
+        ctx.arcTo(x + w, y, x + w, y + h, rr);
+        ctx.arcTo(x + w, y + h, x, y + h, rr);
+        ctx.arcTo(x, y + h, x, y, rr);
+        ctx.arcTo(x, y, x + w, y, rr);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      function draw() {
+        const cw = canvas.width / DPR, ch = canvas.height / DPR;
+
+        // playfield grid glow
+        const g = ctx.createLinearGradient(0, 0, 0, ch);
+        g.addColorStop(0, 'rgba(120,255,214,0.05)');
+        g.addColorStop(1, 'rgba(168,255,120,0.02)');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch);
+
+        // subtle grid
+        ctx.save();
+        ctx.globalAlpha = 0.07;
+        ctx.lineWidth = 1;
+        for (let x = 0; x < cw; x += 32) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, ch); ctx.strokeStyle = '#9fd'; ctx.stroke(); }
+        for (let y = 0; y < ch; y += 32) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cw, y); ctx.strokeStyle = '#af7'; ctx.stroke(); }
+        ctx.restore();
+
+        // Player
+        const p = state.player;
+        ctx.shadowColor = 'rgba(0,0,0,0.35)';
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = '#eaf2ff';
+        drawRoundedRect(p.x, p.y, p.w, p.h, 8);
+
+        // Obstacles
+        ctx.shadowBlur = 8;
+        for (const o of state.obstacles) {
+          const grad = ctx.createLinearGradient(o.x, o.y, o.x, o.y + o.h);
+          grad.addColorStop(0, 'rgba(255,122,122,0.95)');
+          grad.addColorStop(1, 'rgba(255,72,72,0.85)');
+          ctx.fillStyle = grad;
+          drawRoundedRect(o.x, o.y, o.w, o.h, 6);
+        }
+
+        // score HUD mirrors header for smoothness
+        ctx.save();
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(10, 10, 140, 26);
+        ctx.fillStyle = '#eaf2ff';
+        ctx.font = '14px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial';
+        ctx.fillText(`Score: ${state.time.toFixed(1)}s`, 16, 28);
+        ctx.restore();
+      }
+
+      function update(dt) {
+        const cw = canvas.width / DPR, ch = canvas.height / DPR;
+        const p = state.player;
+
+        // Move player
+        let dir = 0; if (state.keys.left) dir -= 1; if (state.keys.right) dir += 1;
+        p.x += dir * p.speed * dt;
+        p.x = clamp(p.x, 6, cw - p.w - 6);
+
+        // Spawn
+        state.spawnTimer += dt;
+        const targetInterval = clamp(0.25 + 0.65 * Math.exp(-state.time / 18), 0.22, 0.9);
+        state.spawnInterval = targetInterval;
+        if (state.spawnTimer >= state.spawnInterval) {
+          state.spawnTimer = 0;
+          spawnObstacle();
+        }
+
+        // Update obstacles
+        for (const o of state.obstacles) o.y += o.speed * dt;
+        // Remove off-screen
+        state.obstacles = state.obstacles.filter(o => o.y < ch + 50);
+
+        // Collisions
+        for (const o of state.obstacles) { if (aabb(p, o)) { gameOver(); break; } }
+
+        // Time & Best
+        state.time += dt;
+        scoreEl.textContent = state.time.toFixed(1);
+        bestEl.textContent = Math.max(state.best, state.time).toFixed(1);
+      }
+
+      function loop(ts) {
+        if (state.mode === 'playing') {
+          const dt = Math.min(0.05, (ts - state.lastTs) / 1000) || 0; // clamp
+          state.lastTs = ts;
+          update(dt);
+          draw();
+        }
+        requestAnimationFrame(loop);
+      }
+
+      requestAnimationFrame((t) => { state.lastTs = t; draw(); requestAnimationFrame(loop); });
+
+      // Input — keyboard
+      const keyMap = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right' };
+
+      window.addEventListener('keydown', (e) => {
+        if (e.code in keyMap) { state.keys[keyMap[e.code]] = true; e.preventDefault(); }
+        if (e.code === 'Enter') { if (state.mode === 'ready' || state.mode === 'gameover') startGame(); }
+        if (e.code === 'KeyP') togglePause();
+      });
+      window.addEventListener('keyup', (e) => {
+        if (e.code in keyMap) { state.keys[keyMap[e.code]] = false; e.preventDefault(); }
+      });
+
+      // Input — touch (left/right halves)
+      function onTouch(e) {
+        e.preventDefault();
+        const touches = e.touches;
+        state.keys.left = state.keys.right = false;
+        for (let i = 0; i < touches.length; i++) {
+          const x = touches[i].clientX;
+          if (x < window.innerWidth * 0.5) state.keys.left = true; else state.keys.right = true;
+        }
+      }
+      function onTouchEnd(e) {
+        e.preventDefault();
+        if (e.touches.length === 0) { state.keys.left = false; state.keys.right = false; }
+      }
+
+      zoneLeft.addEventListener('touchstart', onTouch, { passive: false });
+      zoneRight.addEventListener('touchstart', onTouch, { passive: false });
+      zoneLeft.addEventListener('touchmove', onTouch, { passive: false });
+      zoneRight.addEventListener('touchmove', onTouch, { passive: false });
+      zoneLeft.addEventListener('touchend', onTouchEnd, { passive: false });
+      zoneRight.addEventListener('touchend', onTouchEnd, { passive: false });
+
+      // Buttons
+      pauseBtn.addEventListener('click', () => {
+        if (state.mode === 'ready') return;
+        if (state.mode === 'gameover') return;
+        togglePause();
+      });
+
+      startBtn.addEventListener('click', () => {
+        if (state.mode === 'paused') { togglePause(); return; }
+        startGame();
+      });
+
+      // Show start overlay initially
+      ovTitle.textContent = 'Dodge the Blocks';
+      ovDesc.textContent = 'Avoid the falling blocks. Last as long as you can.';
+      startBtn.textContent = 'Play';
+      overlay.hidden = false;
+
+      // -------- Minimal Test Suite (runs once, logs to console) --------
+      const testStatus = document.getElementById('testStatus');
+      function assert(name, cond) {
+        if (!cond) throw new Error('Test failed: ' + name);
+        console.log('✓', name);
+      }
+      try {
+        assert('clamp upper bound', clamp(5, 0, 3) === 3);
+        assert('clamp lower bound', clamp(-1, 0, 3) === 0);
+        assert('aabb hit', aabb({x:0,y:0,w:10,h:10},{x:5,y:5,w:10,h:10}) === true);
+        assert('aabb miss', aabb({x:0,y:0,w:2,h:2},{x:5,y:5,w:2,h:2}) === false);
+        // storage smoke test (works even when falling back to memory)
+        const k='__testkey';
+        storage.setItem(k,'123');
+        assert('storage getItem', storage.getItem(k) === '123');
+        storage.removeItem(k);
+        assert('storage removeItem', storage.getItem(k) === null);
+        testStatus.textContent = 'Tests: ✓ all passed';
+      } catch (err) {
+        console.error(err);
+        testStatus.textContent = 'Tests: ✗ ' + (err && err.message ? err.message : 'failed');
+      }
+      // -----------------------------------------------------------------
+
+      // Global error guard to surface details inside the page (avoids generic "Script error")
+      window.addEventListener('error', (e) => {
+        ovTitle.textContent = 'Runtime Error';
+        ovDesc.textContent = (e && e.message) ? e.message : 'An unknown error occurred.';
+        overlay.hidden = false;
+      });
+      window.addEventListener('unhandledrejection', (e) => {
+        ovTitle.textContent = 'Promise Error';
+        ovDesc.textContent = (e && e.reason && e.reason.message) ? e.reason.message : 'Unhandled promise rejection.';
+        overlay.hidden = false;
+      });
+
+    } catch (bootErr) {
+      // If anything during setup explodes, show it nicely.
+      const overlay = document.getElementById('overlay');
+      const ovTitle = document.getElementById('ovTitle');
+      const ovDesc = document.getElementById('ovDesc');
+      const startBtn = document.getElementById('startBtn');
+      if (overlay && ovTitle && ovDesc) {
+        ovTitle.textContent = 'Boot Error';
+        ovDesc.textContent = (bootErr && bootErr.message) ? bootErr.message : 'Unknown startup error.';
+        overlay.hidden = false;
+        if (startBtn) { startBtn.textContent = 'Reload'; startBtn.onclick = () => location.reload(); }
+      }
+      console.error(bootErr);
+    }
+  });
+  </script>
+</body>
+</html>
